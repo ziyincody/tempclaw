@@ -1,0 +1,26 @@
+{
+  "name": "tempclaw",
+  "version": "0.1.0",
+  "description": "OpenClaw TUI runner (Docker)",
+  "type": "module",
+  "bin": {
+    "tempclaw": "dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "unbuild",
+    "dev": "unbuild --stub",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "tempclaw": "node dist/cli.mjs"
+  },
+  "dependencies": {
+    "citty": "^0.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "unbuild": "^3.0.0"
+  }
+}
