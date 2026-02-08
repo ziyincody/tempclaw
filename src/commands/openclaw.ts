@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import {
   writeExecApprovals,
-  writeRuntimeConfigFromHost,
+  writeRuntimeConfigFromPath,
   writeRuntimeConfigFromTemplate,
 } from '../openclaw/config.js'
 
@@ -19,18 +19,21 @@ export default defineCommand({
     openclawPath: { type: 'string', description: 'Path to the OpenClaw repo', default: '../openclaw' },
     image: { type: 'string', description: 'Docker image tag to build/run', default: 'openclaw:local' },
     skipBuild: { type: 'boolean', description: 'Skip Docker build and run the image directly' },
+    configPath: { type: 'string', description: 'Path to an OpenClaw config file (openclaw.json)' },
     token: { type: 'string', description: 'Gateway token to use (defaults to random)' },
     model: { type: 'string', description: 'Default model (provider/model) for the session' },
     thinking: { type: 'string', description: 'Thinking level (off|minimal|low|medium|high|xhigh)' },
-    useHostConfig: { type: 'boolean', description: 'Copy host ~/.openclaw/openclaw.json into container state' },
+    verbose: { type: 'string', description: 'Verbose level (off|on|full)' },
   },
   async run({ args }) {
     try {
       const normalizedModel = normalizeModel(args.model)
       const normalizedThinking = normalizeThinking(args.thinking)
+      const normalizedVerbose = normalizeVerbose(args.verbose)
       const shouldBuild = !args.skipBuild
       const openclawPath = resolve(args.openclawPath)
       const dockerfilePath = resolve(openclawPath, 'Dockerfile')
+      const resolvedConfigPath = args.configPath ? resolve(args.configPath) : undefined
       const templatePath = resolve(process.cwd(), 'assets', 'openclaw', 'openclaw.json')
 
       if (shouldBuild) {
@@ -39,36 +42,43 @@ export default defineCommand({
       }
 
       await ensureDockerAvailable()
-      if (!args.useHostConfig) {
+      if (resolvedConfigPath) {
+        await ensureExists(resolvedConfigPath, `OpenClaw config not found: ${resolvedConfigPath}`)
+      } else {
         await ensureExists(templatePath, `OpenClaw template config not found: ${templatePath}`)
       }
 
       const token = (args.token && args.token.trim().length > 0)
         ? args.token.trim()
-        : (args.useHostConfig ? undefined : randomBytes(16).toString('hex'))
+        : (resolvedConfigPath ? undefined : randomBytes(16).toString('hex'))
 
       if (shouldBuild) {
         await runDockerBuild({ image: args.image, dockerfilePath, contextDir: openclawPath })
       }
 
       const runtime = await createRuntimeDirs()
-      if (args.useHostConfig) {
-        await writeRuntimeConfigFromHost(runtime.configPath, {
+      let resolvedToken: string | undefined
+      if (resolvedConfigPath) {
+        resolvedToken = await writeRuntimeConfigFromPath(runtime.configPath, resolvedConfigPath, {
           token,
           model: normalizedModel,
+          thinking: normalizedThinking,
+          verbose: normalizedVerbose,
         })
       } else if (token) {
-        await writeRuntimeConfigFromTemplate(runtime.configPath, templatePath, {
+        resolvedToken = await writeRuntimeConfigFromTemplate(runtime.configPath, templatePath, {
           token,
           model: normalizedModel,
+          thinking: normalizedThinking,
+          verbose: normalizedVerbose,
         })
       } else {
-        throw new Error('Missing gateway token (provide --token or disable --useHostConfig)')
+        throw new Error('Missing gateway token (provide --token or use --configPath with token)')
       }
       await writeExecApprovals(runtime.execApprovalsPath)
 
       try {
-        await runDockerTui({ image: args.image, token, runtime, thinking: normalizedThinking })
+        await runDockerTui({ image: args.image, token: resolvedToken, runtime, thinking: normalizedThinking })
       } finally {
         await cleanupRuntimeDirs(runtime.root)
       }
@@ -225,6 +235,17 @@ function normalizeThinking(thinking?: string): string | undefined {
   const allowed = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
   if (!allowed.includes(trimmed)) {
     throw new Error(`Invalid thinking level "${thinking}". Use one of: ${allowed.join(', ')}.`)
+  }
+  return trimmed
+}
+
+function normalizeVerbose(verbose?: string): string | undefined {
+  if (!verbose) return undefined
+  const trimmed = verbose.trim().toLowerCase()
+  if (!trimmed) return undefined
+  const allowed = ['off', 'on', 'full']
+  if (!allowed.includes(trimmed)) {
+    throw new Error(`Invalid verbose level "${verbose}". Use one of: ${allowed.join(', ')}.`)
   }
   return trimmed
 }

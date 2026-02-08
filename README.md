@@ -8,7 +8,7 @@ tempclaw spins up an ephemeral OpenClaw TUI inside Docker with a pre-seeded conf
 
 ```bash
 git clone https://github.com/ziyincody/tempclaw
-cd <this-repo>
+cd tempclaw
 npm install
 npm run build
 ```
@@ -17,20 +17,20 @@ npm run build
 
 ```bash
 # Build + run OpenClaw TUI (defaults to ../openclaw Dockerfile)
-tempclaw openclaw
+npm run tempclaw openclaw
 
 # Override OpenClaw repo path or image tag
-tempclaw openclaw --openclawPath ../openclaw --image openclaw:local
+npm run tempclaw openclaw --openclawPath ../openclaw --image openclaw:local
 
 # Run a prebuilt image (no local OpenClaw repo required)
-tempclaw openclaw --image alpine/openclaw --skipBuild
+npm run tempclaw openclaw --image alpine/openclaw --skipBuild
 
-# Set default model + thinking level
-tempclaw openclaw --model openai/gpt-5.2 --thinking medium
+# Set default model + thinking + verbosity
+npm run tempclaw openclaw --model openai/gpt-5.2 --thinking medium --verbose full
 
 
-# Use host config (copies ~/.openclaw/openclaw.json into container state)
-tempclaw openclaw --useHostConfig
+# Use a specific OpenClaw config file
+npm run tempclaw openclaw --configPath /path/to/openclaw.json
 ```
 
 ## CLI Features
@@ -40,7 +40,7 @@ tempclaw openclaw --useHostConfig
 - Runtime config seeded from `assets/openclaw/openclaw.json`
 - Exec approvals pre-seeded to avoid prompts
 - Model + thinking level overrides
-- Optional host config import
+- Optional config file import
 
 ### Flags
 
@@ -49,8 +49,9 @@ tempclaw openclaw --useHostConfig
 - `--skipBuild` Skip Docker build and run the image directly
 - `--model` Default model in `provider/model` format
 - `--thinking` Thinking level: `off|minimal|low|medium|high|xhigh`
+- `--verbose` Verbose level: `off|on|full`
 - `--token` Gateway token override
-- `--useHostConfig` Copy `~/.openclaw/openclaw.json` into container state
+- `--configPath` Path to an OpenClaw config file (openclaw.json)
 
 ## Notes
 
