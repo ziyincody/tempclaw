@@ -7,7 +7,7 @@ This document describes the persistent `tempclaw openclaw` lifecycle:
 - `exec`
 - `down`
 
-This document covers the persistent sandbox path only. The legacy one-shot mode still exists in the current implementation, but it is intentionally out of scope here.
+The legacy one-shot mode has been removed. `tempclaw` now manages one explicit persistent sandbox at a time.
 
 ## Overview
 

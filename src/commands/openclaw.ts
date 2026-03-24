@@ -48,7 +48,7 @@ const sharedArgs = {
 export default defineCommand({
   meta: {
     name: 'openclaw',
-    description: 'Run OpenClaw inside Docker (legacy one-shot mode or persistent sandbox lifecycle)',
+    description: 'Run a persistent OpenClaw sandbox lifecycle inside Docker',
   },
   args: sharedArgs,
   subCommands: {
@@ -82,7 +82,8 @@ export default defineCommand({
     if (isLifecycleSubcommandInvocation()) {
       return
     }
-    await runLegacy(args as OpenClawArgs)
+    void args
+    throw new Error('Missing subcommand. Use one of: up, tui, exec, down.')
   },
 })
 
@@ -122,7 +123,6 @@ type MountPath = {
 type PreparedRuntime = {
   image: string
   token?: string
-  thinking?: string
   runtime: RuntimeDirs
   pluginMounts: PluginMount[]
   extraMounts: MountPath[]
@@ -144,20 +144,6 @@ type OpenClawSession = {
   pluginMounts: PluginMount[]
   extraMounts: MountPath[]
   createdAt: string
-}
-
-async function runLegacy(args: OpenClawArgs): Promise<void> {
-  try {
-    const prepared = await prepareRuntime(args)
-    try {
-      await runDockerTuiLegacy(prepared)
-    } finally {
-      await cleanupRuntimeDirs(prepared.runtime.root)
-    }
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error))
-    process.exit(1)
-  }
 }
 
 async function runPersistentUp(args: OpenClawArgs): Promise<void> {
@@ -346,7 +332,6 @@ async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntime> {
   return {
     image: args.image ?? 'openclaw:local',
     token: resolvedToken,
-    thinking: normalizedThinking,
     runtime,
     pluginMounts,
     extraMounts,
@@ -398,50 +383,6 @@ async function runDockerBuild(options: {
   ])
   if (code !== 0) {
     throw new Error(`docker build failed (exit ${code})`)
-  }
-}
-
-async function runDockerTuiLegacy(options: PreparedRuntime): Promise<void> {
-  const envArgs = buildContainerEnvArgs(options.token, options.extraEnv)
-  const gatewayTokenArg = options.token ? '--token "$OPENCLAW_GATEWAY_TOKEN"' : ''
-  const tuiTokenArg = options.token ? '--token "$OPENCLAW_GATEWAY_TOKEN"' : ''
-  const tuiThinkingArg = options.thinking ? `--thinking "${options.thinking}"` : ''
-  const pluginVolumeArgs = (options.pluginMounts ?? []).flatMap((mount) => [
-    '-v',
-    `${mount.hostPath}:${mount.containerPath}:ro`,
-  ])
-  const extraVolumeArgs = (options.extraMounts ?? []).flatMap((mount) => [
-    '-v',
-    `${mount.hostPath}:${mount.containerPath}:ro`,
-  ])
-
-  const containerCommand = [
-    'set -euo pipefail',
-    `node dist/index.js gateway --allow-unconfigured --bind loopback --port ${DEFAULT_GATEWAY_PORT} ${gatewayTokenArg} & GW=$!`,
-    "trap 'kill $GW 2>/dev/null || true' EXIT",
-    'for i in $(seq 1 50); do',
-    `  if node -e 'const net=require("net"); const s=net.connect(${DEFAULT_GATEWAY_PORT}, "127.0.0.1"); s.on("connect",()=>{s.end(); process.exit(0)}); s.on("error",()=>{process.exit(1)});'; then break; fi`,
-    '  sleep 0.1',
-    'done',
-    `node dist/index.js tui --url ${DEFAULT_GATEWAY_URL} ${tuiTokenArg} ${tuiThinkingArg}`,
-  ].join('\n')
-
-  const code = await spawnAndWait('docker', [
-    'run',
-    '--rm',
-    '-it',
-    '-v', `${options.runtime.stateDir}:/home/node/.openclaw`,
-    '-v', `${options.runtime.workspaceDir}:/workspace`,
-    ...pluginVolumeArgs,
-    ...extraVolumeArgs,
-    ...envArgs,
-    options.image,
-    'bash',
-    '-lc',
-    containerCommand,
-  ])
-  if (code !== 0) {
-    throw new Error(`docker run failed (exit ${code})`)
   }
 }
 

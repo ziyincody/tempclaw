@@ -1,7 +1,7 @@
 {
   "name": "tempclaw",
   "version": "0.1.0",
-  "description": "OpenClaw TUI runner (Docker)",
+  "description": "Persistent OpenClaw sandbox runner for Docker",
   "type": "module",
   "bin": {
     "tempclaw": "dist/cli.mjs"
