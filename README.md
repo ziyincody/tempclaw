@@ -9,6 +9,8 @@ tempclaw can still run the old one-shot TUI flow, but the recommended path is no
 - `tempclaw openclaw exec -- <command...>`
 - `tempclaw openclaw down`
 
+Architecture and lifecycle notes: [docs/persistent-sandbox-flow.md](/Users/codywang/src/agentest/docs/persistent-sandbox-flow.md)
+
 ## Install
 
 ```bash
