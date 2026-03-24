@@ -19,6 +19,7 @@ pnpm-debug.log*
 # Env files
 .env
 .env.*
+assets/openclaw/*.local.json
 
 # Test artifacts
 coverage/
