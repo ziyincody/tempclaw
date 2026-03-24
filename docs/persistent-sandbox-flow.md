@@ -7,7 +7,7 @@ This document describes the persistent `tempclaw openclaw` lifecycle:
 - `exec`
 - `down`
 
-The legacy one-shot mode has been removed. `tempclaw` now manages one explicit persistent sandbox at a time.
+This document covers the persistent sandbox path only. The legacy one-shot mode still exists in the current implementation, but it is intentionally out of scope here.
 
 ## Overview
 
@@ -28,8 +28,8 @@ High-level behavior:
 ```mermaid
 flowchart TD
     A["User terminal"] --> B["tempclaw CLI"]
-    B --> C["Host temp runtime under /tmp"]
-    B --> D["Session file under /tmp"]
+    B --> C["Host temp runtime under system temp dir"]
+    B --> D["Session file under system temp dir"]
     B --> E["Docker container"]
 
     C --> C1["state/"]
@@ -55,7 +55,7 @@ flowchart TD
 sequenceDiagram
     participant U as User
     participant T as tempclaw
-    participant H as Host /tmp
+    participant H as Host temp dir
     participant D as Docker
     participant C as Container
     participant G as OpenClaw Gateway
@@ -92,7 +92,7 @@ sequenceDiagram
 
 ## Host State
 
-`tempclaw` creates one temp runtime root per sandbox under `/tmp`. That runtime contains:
+`tempclaw` creates one temp runtime root per sandbox under the system temp directory returned by `os.tmpdir()`. That runtime contains:
 
 - `state/`
 - `workspace/`
@@ -101,9 +101,9 @@ sequenceDiagram
 
 The state directory is mounted into the container as `/home/node/.openclaw`. The workspace directory is mounted as `/workspace`.
 
-`tempclaw` also writes one session file at:
+`tempclaw` also writes one session file at a path under the system temp directory:
 
-- `/tmp/tempclaw-openclaw-session.json`
+- `<system temp dir>/tempclaw-openclaw-session.json`
 
 That file points to the active container and temp runtime paths so `tui`, `exec`, and `down` can reuse the same sandbox.
 
