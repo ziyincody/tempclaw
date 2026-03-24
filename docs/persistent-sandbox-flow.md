@@ -5,6 +5,8 @@ This document describes the persistent `tempclaw openclaw` lifecycle:
 - `up`
 - `tui`
 - `exec`
+- `logs`
+- `restart`
 - `down`
 
 The legacy one-shot mode has been removed. `tempclaw` now manages one explicit persistent sandbox at a time.
@@ -21,7 +23,9 @@ High-level behavior:
 4. `up` writes a small session file so later commands know which sandbox to use.
 5. `tui` starts a fresh OpenClaw TUI process inside the running container and connects it to the gateway.
 6. `exec` runs arbitrary commands inside the same container.
-7. `down` removes the container, temp runtime directories, and session file.
+7. `logs` tails the gateway log file from the same container.
+8. `restart` restarts the gateway process in place without rebuilding the sandbox.
+9. `down` removes the container, temp runtime directories, and session file.
 
 ## Components
 
@@ -82,6 +86,16 @@ sequenceDiagram
     U->>T: openclaw exec -- <command>
     T->>H: read session file
     T->>D: docker exec [-it] <container> <command>
+
+    U->>T: openclaw logs --follow
+    T->>H: read session file
+    T->>D: docker exec [-it] <container> tail -n <lines> -f <gateway log>
+
+    U->>T: openclaw restart
+    T->>H: read session file
+    T->>D: docker exec <container> pkill gateway
+    T->>D: docker exec -d <container> node dist/index.js gateway ...
+    T->>D: poll container until port 18789 is listening
 
     U->>T: openclaw down
     T->>H: read session file
@@ -172,6 +186,27 @@ This is used for things like:
 - delete temp runtime root
 - delete session file
 
+### `logs`
+
+`logs` reads the gateway log file from the running container:
+
+```bash
+docker exec <container> tail -n <lines> /home/node/.openclaw/tempclaw-gateway.log
+docker exec -it <container> tail -n <lines> -f /home/node/.openclaw/tempclaw-gateway.log
+```
+
+### `restart`
+
+`restart` restarts just the gateway process inside the existing sandbox:
+
+```bash
+docker exec <container> bash -lc 'pkill -f "node dist/index.js gateway" || true'
+docker exec -d <container> bash -lc \
+  'node dist/index.js gateway --allow-unconfigured --bind loopback --port 18789 >> /home/node/.openclaw/tempclaw-gateway.log 2>&1'
+```
+
+The container, mounts, temp runtime, and session file stay in place.
+
 ## Runtime Config Behavior
 
 Before the container starts, `tempclaw` writes a runtime `openclaw.json` using either:
@@ -203,7 +238,8 @@ Useful commands:
 
 ```bash
 npm run tempclaw -- openclaw up
-npm run tempclaw -- openclaw exec -- tail -f /home/node/.openclaw/tempclaw-gateway.log
+npm run tempclaw -- openclaw logs --follow
+npm run tempclaw -- openclaw restart
 npm run tempclaw -- openclaw tui
 npm run tempclaw -- openclaw down
 ```

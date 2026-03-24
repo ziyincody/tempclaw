@@ -5,6 +5,8 @@ Persistent OpenClaw sandbox runner for Docker.
 - `tempclaw openclaw up`
 - `tempclaw openclaw tui`
 - `tempclaw openclaw exec -- <command...>`
+- `tempclaw openclaw logs`
+- `tempclaw openclaw restart`
 - `tempclaw openclaw down`
 
 Architecture and lifecycle notes: [docs/persistent-sandbox-flow.md](./docs/persistent-sandbox-flow.md)
@@ -27,6 +29,12 @@ npm run tempclaw -- openclaw tui
 
 # Run commands inside the live sandbox
 npm run tempclaw -- openclaw exec -- openclaw plugins list
+
+# Inspect gateway logs
+npm run tempclaw -- openclaw logs
+
+# Restart the gateway after config or plugin changes
+npm run tempclaw -- openclaw restart
 
 # Tear it down
 npm run tempclaw -- openclaw down
@@ -65,14 +73,20 @@ npm run tempclaw -- openclaw up --env INFERENCE_PROVIDER_BASE_URL=<PROVIDER_URL>
 # Reattach the TUI later
 npm run tempclaw -- openclaw tui
 
-# Execute install/restart commands against the live sandbox
+# View or follow gateway logs
+npm run tempclaw -- openclaw logs
+npm run tempclaw -- openclaw logs --follow
+
+# Restart the gateway in place
+npm run tempclaw -- openclaw restart
+
+# Execute commands against the live sandbox
 npm run tempclaw -- openclaw exec -- openclaw plugins list
-npm run tempclaw -- openclaw exec -- openclaw gateway restart
 ```
 
 ## CLI Features
 
-- Persistent sandbox lifecycle: `up`, `tui`, `exec`, `down`
+- Persistent sandbox lifecycle: `up`, `tui`, `exec`, `logs`, `restart`, `down`
 - Per-sandbox temp state/workspace mounted into the container
 - Runtime config seeded from `assets/openclaw/openclaw.json`
 - Exec approvals pre-seeded to avoid prompts
@@ -96,6 +110,8 @@ npm run tempclaw -- openclaw exec -- openclaw gateway restart
 - `--mountPath` Extra read-only mount(s) as `hostPath:containerPath[,hostPath:containerPath...]`
 - `--providerBaseUrl` Provider base URL override(s) as `provider=url[,provider=url...]`
 - `--env` Extra container env var(s) as `KEY=value[,KEY=value...]`
+- `logs --lines` Number of gateway log lines to show (default `200`)
+- `logs --follow` Stream gateway logs
 
 ## Local Test Configs
 
@@ -131,7 +147,7 @@ Then use the live sandbox for install and restart:
 
 ```bash
 npm run tempclaw -- openclaw exec -- openclaw plugins install /staging/plugin-package-0.1.0.tgz
-npm run tempclaw -- openclaw exec -- openclaw gateway restart
+npm run tempclaw -- openclaw restart
 npm run tempclaw -- openclaw tui
 ```
 

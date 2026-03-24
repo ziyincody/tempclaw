@@ -5,7 +5,7 @@ const main = defineCommand({
   meta: {
     name: 'tempclaw',
     version: '0.1.0',
-    description: 'OpenClaw TUI runner (Docker)',
+    description: 'Persistent OpenClaw sandbox runner for Docker',
   },
   subCommands: {
     openclaw: () => import('./commands/openclaw.js').then((m) => m.default),
