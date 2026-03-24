@@ -5,6 +5,9 @@ type ConfigOverrides = {
   model?: string
   thinking?: string
   verbose?: string
+  pluginLoadPaths?: string[]
+  pluginAllowIds?: string[]
+  providerBaseUrls?: Record<string, string>
 }
 
 export async function writeRuntimeConfigFromTemplate(
@@ -81,6 +84,50 @@ function applyConfigOverrides(config: Record<string, unknown>, overrides: Config
     }
     agents.defaults = defaults
     config.agents = agents
+  }
+
+  if (overrides.pluginLoadPaths && overrides.pluginLoadPaths.length > 0) {
+    const plugins = (config.plugins as Record<string, unknown> | undefined) ?? {}
+    const load = (plugins.load as Record<string, unknown> | undefined) ?? {}
+    const existingPaths = Array.isArray(load.paths)
+      ? load.paths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : []
+    const mergedPaths = [...existingPaths]
+    for (const pluginPath of overrides.pluginLoadPaths) {
+      if (!mergedPaths.includes(pluginPath)) {
+        mergedPaths.push(pluginPath)
+      }
+    }
+    load.paths = mergedPaths
+    plugins.load = load
+    config.plugins = plugins
+  }
+
+  if (overrides.pluginAllowIds && overrides.pluginAllowIds.length > 0) {
+    const plugins = (config.plugins as Record<string, unknown> | undefined) ?? {}
+    const existingAllow = Array.isArray(plugins.allow)
+      ? plugins.allow.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : []
+    const mergedAllow = [...existingAllow]
+    for (const pluginId of overrides.pluginAllowIds) {
+      if (!mergedAllow.includes(pluginId)) {
+        mergedAllow.push(pluginId)
+      }
+    }
+    plugins.allow = mergedAllow
+    config.plugins = plugins
+  }
+
+  if (overrides.providerBaseUrls && Object.keys(overrides.providerBaseUrls).length > 0) {
+    const models = (config.models as Record<string, unknown> | undefined) ?? {}
+    const providers = (models.providers as Record<string, unknown> | undefined) ?? {}
+    for (const [providerId, baseUrl] of Object.entries(overrides.providerBaseUrls)) {
+      const provider = (providers[providerId] as Record<string, unknown> | undefined) ?? {}
+      provider.baseUrl = baseUrl
+      providers[providerId] = provider
+    }
+    models.providers = providers
+    config.models = models
   }
 
   return config
