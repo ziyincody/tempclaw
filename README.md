@@ -2,12 +2,12 @@
 
 Persistent OpenClaw sandbox runner for Docker.
 
-tempclaw can still run the old one-shot TUI flow, but the recommended path is now a persistent sandbox lifecycle that is closer to a real OpenClaw install:
-
 - `tempclaw openclaw up`
 - `tempclaw openclaw tui`
 - `tempclaw openclaw exec -- <command...>`
 - `tempclaw openclaw down`
+
+Architecture and lifecycle notes: [docs/persistent-sandbox-flow.md](./docs/persistent-sandbox-flow.md)
 
 ## Install
 
@@ -30,9 +30,6 @@ npm run tempclaw -- openclaw exec -- openclaw plugins list
 
 # Tear it down
 npm run tempclaw -- openclaw down
-
-# Legacy one-shot mode still works
-npm run tempclaw -- openclaw
 ```
 
 ### Persistent Sandbox
@@ -73,16 +70,9 @@ npm run tempclaw -- openclaw exec -- openclaw plugins list
 npm run tempclaw -- openclaw exec -- openclaw gateway restart
 ```
 
-### Legacy One-Shot Mode
-
-```bash
-npm run tempclaw -- openclaw
-```
-
 ## CLI Features
 
 - Persistent sandbox lifecycle: `up`, `tui`, `exec`, `down`
-- Legacy one-shot `openclaw` mode for quick smoke runs
 - Per-sandbox temp state/workspace mounted into the container
 - Runtime config seeded from `assets/openclaw/openclaw.json`
 - Exec approvals pre-seeded to avoid prompts
