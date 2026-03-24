@@ -60,10 +60,10 @@ npm run tempclaw -- openclaw up --pluginPath /path/to/openclaw-plugin
 npm run tempclaw -- openclaw up --mountPath /path/to/local-repo:/staging/local-repo
 
 # Override provider base URLs for local integration testing
-npm run tempclaw -- openclaw up --configPath /path/to/openclaw.json --providerBaseUrl local=http://host.docker.internal:8787/v1
+npm run tempclaw -- openclaw up --configPath /path/to/openclaw.json --providerBaseUrl local=<PROVIDER_URL>
 
 # Pass extra env vars into the container for plugin/provider test setups
-npm run tempclaw -- openclaw up --env INFERENCE_PROVIDER_BASE_URL=http://host.docker.internal:8787
+npm run tempclaw -- openclaw up --env INFERENCE_PROVIDER_BASE_URL=<PROVIDER_URL>
 
 # Reattach the TUI later
 npm run tempclaw -- openclaw tui
@@ -118,9 +118,11 @@ cp ./assets/openclaw/openclaw.json ./assets/openclaw/openclaw.local.json
 npm run tempclaw -- openclaw up \
   --configPath ./assets/openclaw/openclaw.local.json \
   --pluginPath /path/to/openclaw-plugin \
-  --providerBaseUrl local=http://host.docker.internal:8787/v1 \
-  --env INFERENCE_PROVIDER_BASE_URL=http://host.docker.internal:8787
+  --providerBaseUrl local=<PROVIDER_URL> \
+  --env INFERENCE_PROVIDER_BASE_URL=<PROVIDER_URL>
 ```
+
+`<PROVIDER_URL>` should be the provider base URL your local setup expects, for example `http://host.docker.internal:8787/v1`.
 
 For a production-like local plugin install flow, mount a packaged tarball without auto-loading it:
 
@@ -132,7 +134,7 @@ npm pack
 cd /Users/codywang/src/agentest
 npm run tempclaw -- openclaw up \
   --mountPath /path/to/plugin-repo/plugin-package-0.1.0.tgz:/staging/plugin-package-0.1.0.tgz \
-  --env INFERENCE_PROVIDER_BASE_URL=http://host.docker.internal:8787
+  --env INFERENCE_PROVIDER_BASE_URL=<PROVIDER_URL>
 ```
 
 Then use the live sandbox for install and restart:

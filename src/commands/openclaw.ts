@@ -61,11 +61,8 @@ export default defineCommand({
     }),
     tui: defineCommand({
       meta: { name: 'tui', description: 'Attach the TUI to the running sandbox gateway' },
-      args: {
-        thinking: sharedArgs.thinking,
-      },
       async run({ args }) {
-        await runPersistentTui(args as Pick<OpenClawArgs, 'thinking'>)
+        await runPersistentTui(args as Pick<OpenClawArgs, never>)
       },
     }),
     exec: defineCommand({
@@ -136,7 +133,6 @@ type OpenClawSession = {
   version: 1
   containerName: string
   image: string
-  token?: string
   gatewayPort: number
   gatewayUrl: string
   gatewayLogPath: string
@@ -147,7 +143,6 @@ type OpenClawSession = {
   execApprovalsPath: string
   pluginMounts: PluginMount[]
   extraMounts: MountPath[]
-  extraEnv: Record<string, string>
   createdAt: string
 }
 
@@ -190,7 +185,6 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
         version: 1,
         containerName,
         image: prepared.image,
-        token: prepared.token,
         gatewayPort: DEFAULT_GATEWAY_PORT,
         gatewayUrl: DEFAULT_GATEWAY_URL,
         gatewayLogPath: DEFAULT_GATEWAY_LOG_PATH,
@@ -201,7 +195,6 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
         execApprovalsPath: prepared.runtime.execApprovalsPath,
         pluginMounts: prepared.pluginMounts,
         extraMounts: prepared.extraMounts,
-        extraEnv: prepared.extraEnv,
         createdAt: new Date().toISOString(),
       }
       await writeSession(session)
@@ -224,14 +217,12 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
   }
 }
 
-async function runPersistentTui(args: Pick<OpenClawArgs, 'thinking'>): Promise<void> {
+async function runPersistentTui(_args: Pick<OpenClawArgs, never>): Promise<void> {
   try {
     const session = await requireRunningSession()
-    const thinking = normalizeThinking(args.thinking)
     await attachTuiToContainer({
       containerName: session.containerName,
-      token: session.token,
-      thinking,
+      token: await readRuntimeGatewayToken(session.configPath),
     })
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
@@ -326,8 +317,9 @@ async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntime> {
   }
 
   const runtime = await createRuntimeDirs()
+  let resolvedToken: string | undefined
   if (resolvedConfigPath) {
-    await writeRuntimeConfigFromPath(runtime.configPath, resolvedConfigPath, {
+    resolvedToken = await writeRuntimeConfigFromPath(runtime.configPath, resolvedConfigPath, {
       token,
       model: normalizedModel,
       thinking: normalizedThinking,
@@ -337,7 +329,7 @@ async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntime> {
       providerBaseUrls,
     })
   } else if (token) {
-    await writeRuntimeConfigFromTemplate(runtime.configPath, templatePath, {
+    resolvedToken = await writeRuntimeConfigFromTemplate(runtime.configPath, templatePath, {
       token,
       model: normalizedModel,
       thinking: normalizedThinking,
@@ -353,7 +345,7 @@ async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntime> {
 
   return {
     image: args.image ?? 'openclaw:local',
-    token,
+    token: resolvedToken,
     thinking: normalizedThinking,
     runtime,
     pluginMounts,
@@ -543,7 +535,6 @@ async function waitForGatewayReady(
 async function attachTuiToContainer(options: {
   containerName: string
   token?: string
-  thinking?: string
 }): Promise<void> {
   const args = [
     'exec',
@@ -557,9 +548,6 @@ async function attachTuiToContainer(options: {
   ]
   if (options.token) {
     args.push('--token', options.token)
-  }
-  if (options.thinking) {
-    args.push('--thinking', options.thinking)
   }
 
   const code = await spawnAndWait('docker', args)
@@ -754,7 +742,10 @@ async function readSession(): Promise<OpenClawSession | undefined> {
 }
 
 async function writeSession(session: OpenClawSession): Promise<void> {
-  await writeFile(SESSION_FILE_PATH, `${JSON.stringify(session, null, 2)}\n`, 'utf8')
+  await writeFile(SESSION_FILE_PATH, `${JSON.stringify(session, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
 }
 
 async function clearSession(): Promise<void> {
@@ -803,6 +794,23 @@ async function requireRunningSession(): Promise<OpenClawSession> {
 
 async function cleanupContainerIfExists(containerName: string): Promise<void> {
   await execFileAsync('docker', ['rm', '-f', containerName]).catch(() => undefined)
+}
+
+async function readRuntimeGatewayToken(configPath: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(configPath, 'utf8')
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined
+    }
+
+    const gateway = parsed.gateway as Record<string, unknown> | undefined
+    const auth = gateway?.auth as Record<string, unknown> | undefined
+    const token = auth?.token
+    return typeof token === 'string' && token.trim().length > 0 ? token : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function extractExecCommand(): string[] {
