@@ -118,25 +118,26 @@ export async function waitForGatewayReady(
   timeoutMs = DEFAULT_GATEWAY_STARTUP_TIMEOUT_MS,
   delayMs = DEFAULT_GATEWAY_STARTUP_POLL_MS,
 ): Promise<void> {
-  const attempts = Math.max(1, Math.ceil(timeoutMs / delayMs))
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const code = await runContainerCommand(
-      containerName,
-      [
-        'node',
-        '-e',
-        `const net=require("net"); const s=net.connect(${DEFAULT_GATEWAY_PORT}, "127.0.0.1"); s.on("connect",()=>{s.end(); process.exit(0)}); s.on("error",()=>{process.exit(1)});`,
-      ],
-      { stdio: 'ignore' },
-    )
-    if (code === 0) {
-      return
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
-  }
-
-  throw new Error(
+  await waitForGatewayPortState(
+    containerName,
+    'listening',
+    timeoutMs,
+    delayMs,
     `Timed out waiting for gateway on ${DEFAULT_GATEWAY_URL} after ${Math.round(timeoutMs / 1000)}s. Inspect logs with: npm run tempclaw -- openclaw logs`,
+  )
+}
+
+export async function waitForGatewayStopped(
+  containerName: string,
+  timeoutMs = DEFAULT_GATEWAY_STARTUP_TIMEOUT_MS,
+  delayMs = DEFAULT_GATEWAY_STARTUP_POLL_MS,
+): Promise<void> {
+  await waitForGatewayPortState(
+    containerName,
+    'stopped',
+    timeoutMs,
+    delayMs,
+    `Timed out waiting for gateway on ${DEFAULT_GATEWAY_URL} to stop after ${Math.round(timeoutMs / 1000)}s.`,
   )
 }
 
@@ -179,6 +180,33 @@ export async function runContainerCommand(
 
 export async function cleanupContainerIfExists(containerName: string): Promise<void> {
   await execFileAsync('docker', ['rm', '-f', containerName]).catch(() => undefined)
+}
+
+async function waitForGatewayPortState(
+  containerName: string,
+  targetState: 'listening' | 'stopped',
+  timeoutMs: number,
+  delayMs: number,
+  timeoutMessage: string,
+): Promise<void> {
+  const attempts = Math.max(1, Math.ceil(timeoutMs / delayMs))
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const code = await runContainerCommand(
+      containerName,
+      [
+        'node',
+        '-e',
+        `const net=require("net"); const s=net.connect(${DEFAULT_GATEWAY_PORT}, "127.0.0.1"); s.on("connect",()=>{s.end(); process.exit(0)}); s.on("error",()=>{process.exit(1)});`,
+      ],
+      { stdio: 'ignore' },
+    )
+    if (targetState === 'listening' ? code === 0 : code !== 0) {
+      return
+    }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
+  }
+
+  throw new Error(timeoutMessage)
 }
 
 function buildContainerEnvArgs(token: string | undefined, extraEnv: Record<string, string>): string[] {

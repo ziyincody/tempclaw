@@ -12,6 +12,7 @@ import {
   startGatewayInContainer,
   stopGatewayInContainer,
   waitForGatewayReady,
+  waitForGatewayStopped,
 } from './openclaw-docker.js'
 import { clearSession, ensureNoActiveSession, readSession, requireRunningSession, writeSession } from './openclaw-session.js'
 import { cleanupRuntimeDirs, prepareRuntime } from './openclaw-runtime.js'
@@ -205,6 +206,7 @@ async function runPersistentLogs(args: LogsArgs): Promise<void> {
 async function runPersistentRestart(): Promise<void> {
   const session = await requireRunningSession()
   await stopGatewayInContainer(session.containerName)
+  await waitForGatewayStopped(session.containerName)
   await startGatewayInContainer(session.containerName)
   await waitForGatewayReady(session.containerName)
   console.log(`Restarted gateway in ${session.containerName}`)
