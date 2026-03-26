@@ -15,13 +15,7 @@ export async function writeRuntimeConfigFromTemplate(
   templatePath: string,
   overrides: ConfigOverrides,
 ): Promise<string | undefined> {
-  const template = await readFile(templatePath, 'utf8')
-  const parsed = JSON.parse(template) as Record<string, unknown>
-  const config = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
-  const updated = applyConfigOverrides(config, overrides)
-  const token = getGatewayToken(updated)
-  await writeFile(configPath, `${JSON.stringify(updated, null, 2)}\n`, 'utf8')
-  return token
+  return writeRuntimeConfig(configPath, await readConfigObject(templatePath), overrides)
 }
 
 export async function writeRuntimeConfigFromPath(
@@ -29,13 +23,11 @@ export async function writeRuntimeConfigFromPath(
   sourcePath: string,
   overrides: ConfigOverrides,
 ): Promise<string | undefined> {
-  const raw = await readFile(sourcePath, 'utf8')
-  const parsed = JSON.parse(raw) as Record<string, unknown>
-  const config = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
-  const updated = applyConfigOverrides(config, overrides)
-  const token = getGatewayToken(updated)
-  await writeFile(configPath, `${JSON.stringify(updated, null, 2)}\n`, 'utf8')
-  return token
+  return writeRuntimeConfig(configPath, await readConfigObject(sourcePath), overrides)
+}
+
+export async function readGatewayTokenFromConfigPath(configPath: string): Promise<string | undefined> {
+  return getGatewayToken(await readConfigObject(configPath))
 }
 
 export async function writeExecApprovals(approvalsPath: string): Promise<void> {
@@ -131,6 +123,23 @@ function applyConfigOverrides(config: Record<string, unknown>, overrides: Config
   }
 
   return config
+}
+
+async function writeRuntimeConfig(
+  configPath: string,
+  config: Record<string, unknown>,
+  overrides: ConfigOverrides,
+): Promise<string | undefined> {
+  const updated = applyConfigOverrides(config, overrides)
+  const token = getGatewayToken(updated)
+  await writeFile(configPath, `${JSON.stringify(updated, null, 2)}\n`, 'utf8')
+  return token
+}
+
+async function readConfigObject(configPath: string): Promise<Record<string, unknown>> {
+  const raw = await readFile(configPath, 'utf8')
+  const parsed = JSON.parse(raw) as Record<string, unknown>
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
 }
 
 function getGatewayToken(config: Record<string, unknown>): string | undefined {
