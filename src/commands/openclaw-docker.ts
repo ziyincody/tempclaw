@@ -100,12 +100,18 @@ export async function startGatewayInContainer(containerName: string): Promise<vo
 }
 
 export async function stopGatewayInContainer(containerName: string): Promise<void> {
+  const stopCommand = [
+    'set -euo pipefail',
+    'pids=$(ps -eo pid=,comm= | awk \'index($2, "openclaw-gatewa") == 1 {print $1}\')',
+    'if [ -n "$pids" ]; then kill $pids; fi',
+  ].join('\n')
+
   const { stderr } = await execFileAsync('docker', [
     'exec',
     containerName,
     'bash',
     '-lc',
-    `pkill -f 'node dist/index.js gateway' || true`,
+    stopCommand,
   ])
 
   if (stderr.trim()) {
@@ -125,6 +131,19 @@ export async function waitForGatewayReady(
     delayMs,
     `Timed out waiting for gateway on ${DEFAULT_GATEWAY_URL} after ${Math.round(timeoutMs / 1000)}s. Inspect logs with: npm run tempclaw -- openclaw logs`,
   )
+}
+
+export async function isGatewayReady(
+  containerName: string,
+  timeoutMs = 1_000,
+  delayMs = 250,
+): Promise<boolean> {
+  try {
+    await waitForGatewayReady(containerName, timeoutMs, delayMs)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function waitForGatewayStopped(

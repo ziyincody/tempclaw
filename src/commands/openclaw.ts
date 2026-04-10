@@ -114,6 +114,24 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
   await ensureNoActiveSession()
   const prepared = await prepareRuntime(args)
   const containerName = `tempclaw-openclaw-${randomBytes(4).toString('hex')}`
+  const session: OpenClawSession = {
+    version: 1,
+    containerName,
+    lifecycleState: 'starting',
+    lifecyclePid: process.pid,
+    image: prepared.image,
+    gatewayPort: DEFAULT_GATEWAY_PORT,
+    gatewayUrl: DEFAULT_GATEWAY_URL,
+    gatewayLogPath: DEFAULT_GATEWAY_LOG_PATH,
+    runtimeRoot: prepared.runtime.root,
+    stateDir: prepared.runtime.stateDir,
+    workspaceDir: prepared.runtime.workspaceDir,
+    configPath: prepared.runtime.configPath,
+    execApprovalsPath: prepared.runtime.execApprovalsPath,
+    pluginMounts: prepared.pluginMounts,
+    extraMounts: prepared.extraMounts,
+    createdAt: new Date().toISOString(),
+  }
 
   try {
     await createDetachedContainer({
@@ -126,38 +144,23 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
       containerName,
     })
     await startGatewayInContainer(containerName)
-    await waitForGatewayReady(containerName)
-
-    const session: OpenClawSession = {
-      version: 1,
-      containerName,
-      image: prepared.image,
-      gatewayPort: DEFAULT_GATEWAY_PORT,
-      gatewayUrl: DEFAULT_GATEWAY_URL,
-      gatewayLogPath: DEFAULT_GATEWAY_LOG_PATH,
-      runtimeRoot: prepared.runtime.root,
-      stateDir: prepared.runtime.stateDir,
-      workspaceDir: prepared.runtime.workspaceDir,
-      configPath: prepared.runtime.configPath,
-      execApprovalsPath: prepared.runtime.execApprovalsPath,
-      pluginMounts: prepared.pluginMounts,
-      extraMounts: prepared.extraMounts,
-      createdAt: new Date().toISOString(),
-    }
     await writeSession(session)
+    await waitForGatewayReady(containerName)
+    await writeSession(markSessionReady(session))
 
-    console.log(`Container: ${session.containerName}`)
-    console.log(`Gateway: ${session.gatewayUrl}`)
-    console.log(`Gateway log: ${session.gatewayLogPath}`)
-    console.log('Next steps:')
-    console.log('  npm run tempclaw -- openclaw tui')
-    console.log('  npm run tempclaw -- openclaw logs')
-    console.log('  npm run tempclaw -- openclaw restart')
-    console.log('  npm run tempclaw -- openclaw exec -- openclaw plugins list')
-    console.log('  npm run tempclaw -- openclaw down')
+    printSessionReady(markSessionReady(session))
   } catch (error) {
+    if (await canRecoverUsableSession(session)) {
+      console.warn(
+        `tempclaw recovered the running sandbox after a partial startup failure: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      printSessionReady(markSessionReady(session))
+      return
+    }
+
     await cleanupContainerIfExists(containerName)
     await cleanupRuntimeDirs(prepared.runtime.root)
+    await clearSessionIfOwned(containerName)
     throw error
   }
 }
@@ -205,10 +208,29 @@ async function runPersistentLogs(args: LogsArgs): Promise<void> {
 
 async function runPersistentRestart(): Promise<void> {
   const session = await requireRunningSession()
-  await stopGatewayInContainer(session.containerName)
-  await waitForGatewayStopped(session.containerName)
-  await startGatewayInContainer(session.containerName)
-  await waitForGatewayReady(session.containerName)
+  const restartingSession = {
+    ...session,
+    lifecycleState: 'restarting' as const,
+    lifecyclePid: process.pid,
+  }
+  await writeSession(restartingSession)
+
+  try {
+    await stopGatewayInContainer(session.containerName)
+    await waitForGatewayStopped(session.containerName)
+    await startGatewayInContainer(session.containerName)
+    await waitForGatewayReady(session.containerName)
+    await writeSession(markSessionReady(restartingSession))
+  } catch (error) {
+    if (await canRecoverUsableSession(restartingSession)) {
+      console.warn(
+        `tempclaw recovered the running sandbox after a partial restart failure: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return
+    }
+    throw error
+  }
+
   console.log(`Restarted gateway in ${session.containerName}`)
 }
 
@@ -267,4 +289,42 @@ async function runOrExit(fn: () => Promise<void>): Promise<void> {
     console.error(error instanceof Error ? error.message : String(error))
     process.exit(1)
   }
+}
+
+async function canRecoverUsableSession(session: OpenClawSession): Promise<boolean> {
+  try {
+    await writeSession(session)
+    await waitForGatewayReady(session.containerName, 3_000, 250)
+    await writeSession(markSessionReady(session))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function markSessionReady(session: OpenClawSession): OpenClawSession {
+  return {
+    ...session,
+    lifecycleState: 'ready',
+    lifecyclePid: undefined,
+  }
+}
+
+async function clearSessionIfOwned(containerName: string): Promise<void> {
+  const session = await readSession()
+  if (session?.containerName === containerName) {
+    await clearSession()
+  }
+}
+
+function printSessionReady(session: OpenClawSession): void {
+  console.log(`Container: ${session.containerName}`)
+  console.log(`Gateway: ${session.gatewayUrl}`)
+  console.log(`Gateway log: ${session.gatewayLogPath}`)
+  console.log('Next steps:')
+  console.log('  npm run tempclaw -- openclaw tui')
+  console.log('  npm run tempclaw -- openclaw logs')
+  console.log('  npm run tempclaw -- openclaw restart')
+  console.log('  npm run tempclaw -- openclaw exec -- openclaw plugins list')
+  console.log('  npm run tempclaw -- openclaw down')
 }
