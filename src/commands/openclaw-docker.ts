@@ -100,12 +100,18 @@ export async function startGatewayInContainer(containerName: string): Promise<vo
 }
 
 export async function stopGatewayInContainer(containerName: string): Promise<void> {
+  const stopCommand = [
+    'set -euo pipefail',
+    'pids=$(ps -eo pid=,comm= | awk \'$2 == "openclaw-gateway" {print $1}\')',
+    'if [ -n "$pids" ]; then kill $pids; fi',
+  ].join('\n')
+
   const { stderr } = await execFileAsync('docker', [
     'exec',
     containerName,
     'bash',
     '-lc',
-    `pkill -f 'node dist/index.js gateway' || true`,
+    stopCommand,
   ])
 
   if (stderr.trim()) {

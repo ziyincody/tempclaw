@@ -117,7 +117,8 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
   const session: OpenClawSession = {
     version: 1,
     containerName,
-    ownerPid: process.pid,
+    lifecycleState: 'starting',
+    lifecyclePid: process.pid,
     image: prepared.image,
     gatewayPort: DEFAULT_GATEWAY_PORT,
     gatewayUrl: DEFAULT_GATEWAY_URL,
@@ -145,14 +146,15 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
     await startGatewayInContainer(containerName)
     await writeSession(session)
     await waitForGatewayReady(containerName)
+    await writeSession(markSessionReady(session))
 
-    printSessionReady(session)
+    printSessionReady(markSessionReady(session))
   } catch (error) {
     if (await canRecoverUsableSession(session)) {
       console.warn(
         `tempclaw recovered the running sandbox after a partial startup failure: ${error instanceof Error ? error.message : String(error)}`,
       )
-      printSessionReady(session)
+      printSessionReady(markSessionReady(session))
       return
     }
 
@@ -206,10 +208,29 @@ async function runPersistentLogs(args: LogsArgs): Promise<void> {
 
 async function runPersistentRestart(): Promise<void> {
   const session = await requireRunningSession()
-  await stopGatewayInContainer(session.containerName)
-  await waitForGatewayStopped(session.containerName)
-  await startGatewayInContainer(session.containerName)
-  await waitForGatewayReady(session.containerName)
+  const restartingSession = {
+    ...session,
+    lifecycleState: 'restarting' as const,
+    lifecyclePid: process.pid,
+  }
+  await writeSession(restartingSession)
+
+  try {
+    await stopGatewayInContainer(session.containerName)
+    await waitForGatewayStopped(session.containerName)
+    await startGatewayInContainer(session.containerName)
+    await waitForGatewayReady(session.containerName)
+    await writeSession(markSessionReady(restartingSession))
+  } catch (error) {
+    if (await canRecoverUsableSession(restartingSession)) {
+      console.warn(
+        `tempclaw recovered the running sandbox after a partial restart failure: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return
+    }
+    throw error
+  }
+
   console.log(`Restarted gateway in ${session.containerName}`)
 }
 
@@ -274,9 +295,18 @@ async function canRecoverUsableSession(session: OpenClawSession): Promise<boolea
   try {
     await writeSession(session)
     await waitForGatewayReady(session.containerName, 3_000, 250)
+    await writeSession(markSessionReady(session))
     return true
   } catch {
     return false
+  }
+}
+
+function markSessionReady(session: OpenClawSession): OpenClawSession {
+  return {
+    ...session,
+    lifecycleState: 'ready',
+    lifecyclePid: undefined,
   }
 }
 

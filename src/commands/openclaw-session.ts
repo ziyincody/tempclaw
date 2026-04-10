@@ -45,9 +45,9 @@ export async function ensureNoActiveSession(): Promise<void> {
     )
   }
 
-  if (running && isHostProcessRunning(session.ownerPid)) {
+  if (running && isSessionTransitionInFlight(session)) {
     throw new Error(
-      `A tempclaw OpenClaw sandbox is still starting (${session.containerName}). Wait a moment or use "npm run tempclaw -- openclaw down" if it is stuck.`,
+      `A tempclaw OpenClaw sandbox is still ${session.lifecycleState} (${session.containerName}). Wait a moment or use "npm run tempclaw -- openclaw down" if it is stuck.`,
     )
   }
 
@@ -70,11 +70,15 @@ export async function requireRunningSession(): Promise<OpenClawSession> {
   }
 
   if (await isGatewayReady(session.containerName)) {
-    return session
+    const readySession = normalizeReadySession(session)
+    if (readySession !== session) {
+      await writeSession(readySession)
+    }
+    return readySession
   }
 
-  if (isHostProcessRunning(session.ownerPid)) {
-    throw new Error(`The tempclaw OpenClaw sandbox is still starting (${session.containerName}). Try again in a moment.`)
+  if (isSessionTransitionInFlight(session)) {
+    throw new Error(`The tempclaw OpenClaw sandbox is still ${session.lifecycleState} (${session.containerName}). Try again in a moment.`)
   }
 
   await cleanupContainerIfExists(session.containerName)
@@ -89,6 +93,26 @@ async function inspectContainerRunning(containerName: string): Promise<boolean> 
     return stdout.trim() === 'true'
   } catch {
     return false
+  }
+}
+
+function isSessionTransitionInFlight(session: OpenClawSession): boolean {
+  if (session.lifecycleState === 'ready') {
+    return false
+  }
+
+  return isHostProcessRunning(session.lifecyclePid)
+}
+
+function normalizeReadySession(session: OpenClawSession): OpenClawSession {
+  if (session.lifecycleState === 'ready' && session.lifecyclePid === undefined) {
+    return session
+  }
+
+  return {
+    ...session,
+    lifecycleState: 'ready',
+    lifecyclePid: undefined,
   }
 }
 
