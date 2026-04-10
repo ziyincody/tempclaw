@@ -127,6 +127,19 @@ export async function waitForGatewayReady(
   )
 }
 
+export async function isGatewayReady(
+  containerName: string,
+  timeoutMs = 1_000,
+  delayMs = 250,
+): Promise<boolean> {
+  try {
+    await waitForGatewayReady(containerName, timeoutMs, delayMs)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function waitForGatewayStopped(
   containerName: string,
   timeoutMs = DEFAULT_GATEWAY_STARTUP_TIMEOUT_MS,

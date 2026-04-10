@@ -117,6 +117,7 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
   const session: OpenClawSession = {
     version: 1,
     containerName,
+    ownerPid: process.pid,
     image: prepared.image,
     gatewayPort: DEFAULT_GATEWAY_PORT,
     gatewayUrl: DEFAULT_GATEWAY_URL,

@@ -43,6 +43,7 @@ export type PreparedRuntime = {
 export type OpenClawSession = {
   version: 1
   containerName: string
+  ownerPid?: number
   image: string
   gatewayPort: number
   gatewayUrl: string
