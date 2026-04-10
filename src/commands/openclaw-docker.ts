@@ -102,7 +102,7 @@ export async function startGatewayInContainer(containerName: string): Promise<vo
 export async function stopGatewayInContainer(containerName: string): Promise<void> {
   const stopCommand = [
     'set -euo pipefail',
-    'pids=$(ps -eo pid=,comm= | awk \'$2 == "openclaw-gateway" {print $1}\')',
+    'pids=$(ps -eo pid=,comm= | awk \'index($2, "openclaw-gatewa") == 1 {print $1}\')',
     'if [ -n "$pids" ]; then kill $pids; fi',
   ].join('\n')
 
