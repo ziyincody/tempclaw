@@ -157,7 +157,7 @@ async function runPersistentUp(args: OpenClawArgs): Promise<void> {
 
     await cleanupContainerIfExists(containerName)
     await cleanupRuntimeDirs(prepared.runtime.root)
-    await clearSession()
+    await clearSessionIfOwned(containerName)
     throw error
   }
 }
@@ -276,6 +276,13 @@ async function canRecoverUsableSession(session: OpenClawSession): Promise<boolea
     return true
   } catch {
     return false
+  }
+}
+
+async function clearSessionIfOwned(containerName: string): Promise<void> {
+  const session = await readSession()
+  if (session?.containerName === containerName) {
+    await clearSession()
   }
 }
 
