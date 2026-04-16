@@ -1,3 +1,4 @@
+import { copyFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { ensureDockerAvailable, runDockerBuild } from './framework-docker.js'
 import { createRuntimeDirs, ensureExists, parseContainerEnv, parseMountPaths } from './framework-runtime.js'
@@ -7,6 +8,7 @@ export async function prepareHermesRuntime(args: HermesArgs): Promise<PreparedFr
   const shouldBuild = !args.skipBuild
   const hermesPath = resolve(args.hermesPath ?? '../hermes-agent')
   const dockerfilePath = resolve(hermesPath, 'Dockerfile')
+  const resolvedConfigPath = args.configPath ? resolve(args.configPath) : undefined
   const extraMounts = parseMountPaths(args.mountPath)
   const extraEnv = parseContainerEnv(args.env) ?? {}
 
@@ -16,6 +18,9 @@ export async function prepareHermesRuntime(args: HermesArgs): Promise<PreparedFr
   }
 
   await ensureDockerAvailable()
+  if (resolvedConfigPath) {
+    await ensureExists(resolvedConfigPath, `Hermes config not found: ${resolvedConfigPath}`)
+  }
   for (const mount of extraMounts) {
     await ensureExists(mount.hostPath, `Mount path not found: ${mount.hostPath}`)
   }
@@ -25,6 +30,11 @@ export async function prepareHermesRuntime(args: HermesArgs): Promise<PreparedFr
   }
 
   const runtime = await createRuntimeDirs('tempclaw-hermes-')
+  const configPath = join(runtime.stateDir, 'config.yaml')
+
+  if (resolvedConfigPath) {
+    await copyFile(resolvedConfigPath, configPath)
+  }
 
   return {
     image: args.image ?? 'hermes-agent:local',
@@ -43,6 +53,7 @@ export async function prepareHermesRuntime(args: HermesArgs): Promise<PreparedFr
       ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
       ...extraEnv,
     },
+    configPath,
     entrypoint: 'bash',
     command: getHermesKeepaliveCommand(),
     extraMounts,
@@ -103,17 +114,15 @@ export function getHermesGatewayStopCommand(): string {
 
 export function getHermesGatewayReadyCommand(): string {
   return [
-    '/opt/hermes/.venv/bin/python',
-    '-c',
-    [
-      'from gateway.status import get_running_pid, read_runtime_status',
-      'import sys',
-      'pid = get_running_pid()',
-      'status = read_runtime_status() or {}',
-      'state = status.get("gateway_state")',
-      'sys.exit(0 if pid and state not in ("starting", "startup_failed") else 1)',
-    ].join('; '),
-  ].join(' ')
+    '/opt/hermes/.venv/bin/python - <<\'PY\'',
+    'from gateway.status import get_running_pid, read_runtime_status',
+    'import sys',
+    'pid = get_running_pid()',
+    'status = read_runtime_status() or {}',
+    'state = status.get("gateway_state")',
+    'sys.exit(0 if pid and state not in ("starting", "startup_failed") else 1)',
+    'PY',
+  ].join('\n')
 }
 
 export function getHermesBootstrapReadyCommand(): string {

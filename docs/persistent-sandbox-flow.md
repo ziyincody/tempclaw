@@ -1,13 +1,8 @@
 # Persistent Sandbox Flow
 
-This document describes the persistent `tempclaw openclaw` lifecycle:
+This document describes the persistent `tempclaw openclaw` lifecycle.
 
-- `up`
-- `tui`
-- `exec`
-- `logs`
-- `restart`
-- `down`
+`tempclaw` also supports `tempclaw hermes`, but Hermes has different runtime semantics. This document is intentionally OpenClaw-specific.
 
 The legacy one-shot mode has been removed. `tempclaw` now manages one explicit persistent sandbox at a time.
 
@@ -117,7 +112,7 @@ The state directory is mounted into the container as `/home/node/.openclaw`. The
 
 `tempclaw` also writes one session file at a path under the system temp directory:
 
-- `<system temp dir>/tempclaw-openclaw-session.json`
+- `<system temp dir>/tempclaw-session.json`
 
 That file points to the active container and temp runtime paths so `tui`, `exec`, and `down` can reuse the same sandbox.
 

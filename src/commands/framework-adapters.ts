@@ -66,6 +66,7 @@ const hermesSharedArgs = {
   hermesPath: { type: 'string', description: 'Path to the Hermes repo', default: '../hermes-agent' },
   image: { type: 'string', description: 'Docker image tag to build/run', default: 'hermes-agent:local' },
   skipBuild: { type: 'boolean', description: 'Skip Docker build and run the image directly' },
+  configPath: { type: 'string', description: 'Path to a Hermes config file (config.yaml)' },
   mountPath: {
     type: 'string',
     description: 'Extra read-only mount(s) as hostPath:containerPath[,hostPath:containerPath...]',
@@ -188,7 +189,7 @@ export const hermesAdapter: FrameworkAdapter<HermesArgs, HermesLogsArgs> = {
   },
   printSessionReady(session) {
     console.log(`Container: ${session.containerName}`)
-    console.log(`Home: ${session.homeDir.replace('/home', '') === session.homeDir ? session.homeDir : session.homeDir}`)
+    console.log(`Home: ${session.homeDir}`)
     console.log(`Log: ${session.logPath}`)
     console.log('Next steps:')
     console.log('  npm run tempclaw -- hermes tui')

@@ -1,0 +1,16 @@
+model:
+  default: "deepseek/deepseek-chat"
+  provider: "custom"
+  base_url: "http://host.docker.internal:8000/v1"
+  api_key: "${MODEL_API_KEY}"
+
+terminal:
+  backend: "local"
+  cwd: "/workspace"
+  timeout: 180
+  docker_mount_cwd_to_workspace: false
+  lifetime_seconds: 300
+  container_cpu: 1
+  container_memory: 5120
+  container_disk: 51200
+  container_persistent: true

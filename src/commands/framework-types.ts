@@ -66,6 +66,7 @@ export type OpenClawArgs = SharedFrameworkArgs & {
 
 export type HermesArgs = SharedFrameworkArgs & {
   hermesPath?: string
+  configPath?: string
   startGateway?: boolean
 }
 
