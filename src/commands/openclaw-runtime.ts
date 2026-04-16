@@ -1,16 +1,16 @@
-import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { tmpdir } from 'node:os'
 import {
   writeExecApprovals,
   writeRuntimeConfigFromPath,
   writeRuntimeConfigFromTemplate,
 } from '../openclaw/config.js'
-import { ensureDockerAvailable, runDockerBuild } from './openclaw-docker.js'
-import type { MountPath, OpenClawArgs, PluginMount, PreparedRuntime, RuntimeDirs } from './openclaw-types.js'
+import { ensureDockerAvailable, runDockerBuild } from './framework-docker.js'
+import { createRuntimeDirs, ensureExists, parseContainerEnv, parseMountPaths } from './framework-runtime.js'
+import type { OpenClawArgs, PluginMount, PreparedFrameworkRuntime } from './framework-types.js'
 
-export async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntime> {
+export async function prepareOpenClawRuntime(args: OpenClawArgs): Promise<PreparedFrameworkRuntime> {
   const normalizedModel = normalizeModel(args.model)
   const normalizedThinking = normalizeThinking(args.thinking)
   const normalizedVerbose = normalizeVerbose(args.verbose)
@@ -56,10 +56,13 @@ export async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntim
     await runDockerBuild({ image: args.image ?? 'openclaw:local', dockerfilePath, contextDir: openclawPath })
   }
 
-  const runtime = await createRuntimeDirs()
+  const runtime = await createRuntimeDirs('tempclaw-openclaw-')
+  const configPath = join(runtime.stateDir, 'openclaw.json')
+  const execApprovalsPath = join(runtime.stateDir, 'exec-approvals.json')
+
   let resolvedToken: string | undefined
   if (resolvedConfigPath) {
-    resolvedToken = await writeRuntimeConfigFromPath(runtime.configPath, resolvedConfigPath, {
+    resolvedToken = await writeRuntimeConfigFromPath(configPath, resolvedConfigPath, {
       token,
       model: normalizedModel,
       thinking: normalizedThinking,
@@ -69,7 +72,7 @@ export async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntim
       providerBaseUrls,
     })
   } else if (token) {
-    resolvedToken = await writeRuntimeConfigFromTemplate(runtime.configPath, templatePath, {
+    resolvedToken = await writeRuntimeConfigFromTemplate(configPath, templatePath, {
       token,
       model: normalizedModel,
       thinking: normalizedThinking,
@@ -82,27 +85,35 @@ export async function prepareRuntime(args: OpenClawArgs): Promise<PreparedRuntim
     throw new Error('Missing gateway token (provide --token or use --configPath with token)')
   }
 
-  await writeExecApprovals(runtime.execApprovalsPath)
+  await writeExecApprovals(execApprovalsPath)
 
   return {
     image: args.image ?? 'openclaw:local',
-    token: resolvedToken,
     runtime,
+    stateContainerPath: '/home/node/.openclaw',
+    workspaceContainerPath: '/workspace',
+    homeDir: '/home/node',
+    workdir: '/workspace',
+    logPath: '/home/node/.openclaw/tempclaw-gateway.log',
+    mounts: [...pluginMounts, ...extraMounts],
+    env: {
+      HOME: '/home/node',
+      TERM: 'xterm-256color',
+      OPENCLAW_CONFIG_PATH: '/home/node/.openclaw/openclaw.json',
+      OPENCLAW_STATE_DIR: '/home/node/.openclaw',
+      OPENCLAW_WORKSPACE_DIR: '/workspace',
+      ...(resolvedToken ? { OPENCLAW_GATEWAY_TOKEN: resolvedToken } : {}),
+      ...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
+      ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
+      ...extraEnv,
+    },
+    configPath,
+    execApprovalsPath,
     pluginMounts,
     extraMounts,
-    extraEnv,
-  }
-}
-
-export async function cleanupRuntimeDirs(root: string): Promise<void> {
-  await rm(root, { recursive: true, force: true })
-}
-
-async function ensureExists(path: string, message: string): Promise<void> {
-  try {
-    await access(path)
-  } catch {
-    throw new Error(message)
+    gatewayPort: 18789,
+    gatewayUrl: 'ws://127.0.0.1:18789',
+    managedProcess: 'gateway',
   }
 }
 
@@ -117,70 +128,18 @@ async function resolvePluginId(pluginPath: string): Promise<string | undefined> 
   }
 }
 
-async function createRuntimeDirs(): Promise<RuntimeDirs> {
-  const root = await mkdtemp(join(tmpdir(), 'tempclaw-openclaw-'))
-  const stateDir = join(root, 'state')
-  const workspaceDir = join(root, 'workspace')
-  await mkdir(stateDir, { recursive: true })
-  await mkdir(workspaceDir, { recursive: true })
-  return {
-    root,
-    stateDir,
-    workspaceDir,
-    configPath: join(stateDir, 'openclaw.json'),
-    execApprovalsPath: join(stateDir, 'exec-approvals.json'),
-  }
-}
-
 function createPluginMounts(pluginPaths: string[]): PluginMount[] {
   return pluginPaths.map((hostPath, index) => {
     const suffix = basename(hostPath).replace(/[^a-zA-Z0-9._-]/g, '-')
     return {
       hostPath,
       containerPath: `/plugins/${index}-${suffix || 'plugin'}`,
+      readOnly: true,
     }
   })
 }
 
-function parseMountPaths(raw?: string): MountPath[] {
-  if (!raw) return []
-
-  return raw
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((assignment) => {
-      const separatorIndex = assignment.indexOf(':')
-      if (separatorIndex <= 0 || separatorIndex === assignment.length - 1) {
-        throw new Error(`Invalid mount path "${assignment}". Use hostPath:containerPath.`)
-      }
-
-      const hostPath = resolve(assignment.slice(0, separatorIndex).trim())
-      const containerPath = assignment.slice(separatorIndex + 1).trim()
-      if (!hostPath || !containerPath) {
-        throw new Error(`Invalid mount path "${assignment}". Use hostPath:containerPath.`)
-      }
-      if (!containerPath.startsWith('/')) {
-        throw new Error(`Invalid mount path "${assignment}". Container path must be absolute.`)
-      }
-
-      return { hostPath, containerPath }
-    })
-}
-
 function parseProviderBaseUrls(raw?: string): Record<string, string> | undefined {
-  return parseAssignments(raw, 'provider base URL', false)
-}
-
-function parseContainerEnv(raw?: string): Record<string, string> | undefined {
-  return parseAssignments(raw, 'environment variable', true)
-}
-
-function parseAssignments(
-  raw: string | undefined,
-  label: string,
-  validateKey: boolean,
-): Record<string, string> | undefined {
   if (!raw) return undefined
 
   const assignments = raw
@@ -196,16 +155,13 @@ function parseAssignments(
   for (const assignment of assignments) {
     const separatorIndex = assignment.indexOf('=')
     if (separatorIndex <= 0 || separatorIndex === assignment.length - 1) {
-      throw new Error(`Invalid ${label} "${assignment}". Use name=value.`)
+      throw new Error(`Invalid provider base URL "${assignment}". Use name=value.`)
     }
 
     const key = assignment.slice(0, separatorIndex).trim()
     const value = assignment.slice(separatorIndex + 1).trim()
     if (!key || !value) {
-      throw new Error(`Invalid ${label} "${assignment}". Use name=value.`)
-    }
-    if (validateKey && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      throw new Error(`Invalid environment variable name "${key}".`)
+      throw new Error(`Invalid provider base URL "${assignment}". Use name=value.`)
     }
 
     parsed[key] = value

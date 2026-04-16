@@ -1,7 +1,7 @@
 {
   "name": "tempclaw",
   "version": "0.1.0",
-  "description": "Persistent OpenClaw sandbox runner for Docker",
+  "description": "Persistent agent sandbox runner for Docker",
   "type": "module",
   "bin": {
     "tempclaw": "dist/cli.mjs"

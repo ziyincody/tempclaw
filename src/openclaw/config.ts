@@ -50,14 +50,15 @@ export async function writeExecApprovals(approvalsPath: string): Promise<void> {
 }
 
 function applyConfigOverrides(config: Record<string, unknown>, overrides: ConfigOverrides) {
+  const gateway = (config.gateway as Record<string, unknown> | undefined) ?? {}
+  gateway.mode = 'local'
+  config.gateway = gateway
+
   if (overrides.token) {
-    const gateway = (config.gateway as Record<string, unknown> | undefined) ?? {}
     const auth = (gateway.auth as Record<string, unknown> | undefined) ?? {}
     auth.mode = 'token'
     auth.token = overrides.token
-    gateway.mode = 'local'
     gateway.auth = auth
-    config.gateway = gateway
   }
 
   if (overrides.model || overrides.thinking || overrides.verbose) {
