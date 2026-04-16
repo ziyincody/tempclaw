@@ -1,4 +1,3 @@
-import { readGatewayTokenFromConfigPath } from '../openclaw/config.js'
 import { runContainerCommand } from './framework-docker.js'
 import {
   attachHermesTuiToContainer,
@@ -108,7 +107,6 @@ export const openClawAdapter: FrameworkAdapter<OpenClawArgs, LogsArgs> = {
   async attachTui(session) {
     await attachTuiToContainer({
       containerName: session.containerName,
-      token: session.configPath ? await readGatewayTokenFromConfigPath(session.configPath) : undefined,
     })
   },
   async runLogs(session, args) {

@@ -75,12 +75,8 @@ export async function waitForGatewayStopped(
 
 export async function attachTuiToContainer(options: {
   containerName: string
-  token?: string
 }): Promise<void> {
-  const args = ['node', 'dist/index.js', 'tui', '--url', DEFAULT_GATEWAY_URL]
-  if (options.token) {
-    args.push('--token', options.token)
-  }
+  const args = ['node', 'dist/index.js', 'tui']
 
   const code = await runContainerCommand(options.containerName, args, { interactive: true })
   if (code !== 0) {
